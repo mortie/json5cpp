@@ -151,7 +151,9 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 
 	while (true) {
 		int ch = is.get();
-		if (ch == startChar) {
+		if (ch == EOF) {
+			return false;
+		} else if (ch == startChar) {
 			return true;
 		} else if (ch == '\\') {
 			ch = is.get();
@@ -389,7 +391,9 @@ inline bool parseObject(std::istream &is, Json::Value &v, int maxDepth) {
 		}
 		is.get();
 
-		parse(is, v[key], maxDepth);
+		if (!parse(is, v[key], maxDepth)) {
+			return false;
+		}
 	}
 }
 
@@ -418,7 +422,9 @@ inline bool parseArray(std::istream &is, Json::Value &v, int maxDepth) {
 			return true;
 		}
 
-		parse(is, v[index++], maxDepth);
+		if (!parse(is, v[index++], maxDepth)) {
+			return false;
+		}
 	}
 }
 

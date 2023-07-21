@@ -35,7 +35,7 @@ int main() {
 		}
 	}
 
-	std::cout << numSuccesses << '/' << numTests << " tests succeeded.";
+	std::cout << numSuccesses << '/' << numTests << " tests succeeded.\n";
 	if (numTests == numSuccesses) {
 		return 0;
 	} else {
