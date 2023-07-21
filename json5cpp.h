@@ -145,6 +145,47 @@ inline bool read4Hex(std::istream &is, unsigned int &u) {
 	return true;
 }
 
+inline bool readUnicodeEscape(std::istream &is, std::string &str) {
+	// Assume we have already read the first '\' and 'u'
+
+	unsigned int u1;
+	if (!read4Hex(is, u1)) {
+		return false;
+	}
+
+	if (u1 >= 0xd800u && u1 <= 0xdbffu) {
+		// First character was a high surrogate, read the low surrogate
+		if (is.peek() != '\\') {
+			return false;
+		}
+		is.get();
+
+		if (is.peek() != 'u') {
+			return false;
+		}
+		is.get();
+
+		unsigned int u2;
+		if (!read4Hex(is, u2)) {
+			return false;
+		}
+
+		if (!(u2 >= 0xdc00u && u2 <= 0xdfffu)) {
+			// Don't pair the high surrogate with a non-low-surrogate
+			return false;
+		}
+
+		writeUtf8((u1 - 0xd800u) * 0x400u + u2 - 0xdc00u + 0x10000u, str);
+		return true;
+	} else if (u1 >= 0xdc00u && u1 <= 0xdfffu) {
+		// Don't allow unpaired surrogates
+		return false;
+	} else {
+		writeUtf8(u1, str);
+		return true;
+	}
+}
+
 // https://spec.json5.org/#strings JSON5String
 inline bool readStringLiteral(std::istream &is, std::string &str) {
 	int startChar = is.get(); // '"' or "'"
@@ -171,6 +212,18 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 				str += '\t';
 			} else if (ch == 'v') {
 				str += '\v';
+			} else if (ch == '0') {
+				// I don't get why "\0" wouldn't always just be a nul character,
+				// but hey, https://262.ecma-international.org/5.1/#sec-7.8.4 EscapeSequence
+				// character says: 0 [lookahead != DecimalDigit].
+				// If lookahead is a DecimalDigit, we fall back to NonEscapeCharacter,
+				// which means we just add the character to the string
+				int next = is.peek();
+				if (next >= '0' && next <= '9') {
+					str += '0';
+				} else {
+					str += '\0';
+				}
 			} else if (ch == 'x') {
 				int a = hexChar(is.get());
 				int b = hexChar(is.get());
@@ -179,40 +232,7 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 				}
 				str += (a << 4) | b;
 			} else if (ch == 'u') {
-				unsigned int u1;
-				if (!read4Hex(is, u1)) {
-					return false;
-				}
-
-				if (u1 >= 0xd800u && u1 <= 0xdbffu) {
-					// Don't allow unpaired surrogates
-					if (is.peek() != '\\') {
-						return false;
-					}
-					is.get();
-
-					if (is.peek() != 'u') {
-						return false;
-					}
-					is.get();
-
-					unsigned int u2;
-					if (!read4Hex(is, u2)) {
-						return false;
-					}
-
-					if (!(u2 >= 0xdc00u && u2 <= 0xdfffu)) {
-						// Don't pair the high surrogate with a non-low-surrogate
-						return false;
-					}
-
-					writeUtf8((u1 - 0xd800u) * 0x400u + u2 - 0xdc00u + 0x10000u, str);
-				} else if (u1 >= 0xdc00u && u1 <= 0xdfffu) {
-					// Don't allow unpaired surrogates
-					return false;
-				} else {
-					writeUtf8(u1, str);
-				}
+				readUnicodeEscape(is, str);
 			} else if (ch == '\n' || ch == '\r') {
 				// Ignore line separator and paragraph separator, because again,
 				// I don't wanna deal with parsing UTF-8
@@ -221,6 +241,9 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 					str += is.get();
 				}
 			} else {
+				// Yeah, all other sequences match the NonEscapeCharacter case,
+				// so you may escape any character.
+				// That means "\u1000" is a unicode escape while "\U1000" is a liteal "U1000".
 				str += ch;
 			}
 		} else if (ch == '\n' || ch == '\r') {
