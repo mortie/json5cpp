@@ -40,6 +40,10 @@ function diff(a, b) {
 		}
 	} else if (isNaN(a) && isNaN(b)) {
 		return null;
+	} else if (a == null && isNaN(b)) {
+		// The json5 command outputs null for NaN, since NaN is unrepresentable
+		// as JSON. Therefore, we consider Json5Cpp null equal to JSON5 NaN.
+		return null;
 	} else if (a != b) {
 		return "A (" + a + ") != B (" + b + ")";
 	} else {
@@ -64,8 +68,8 @@ function checkJson(path) {
 	let d = diff(fromJson5Cpp, fromJson);
 	if (d != null) {
 		console.log(path + ": parse difference:", d);
-		console.log("Json5Cpp:", JSON.stringify(fromJson5Cpp, null, 4));
-		console.log("JSON.parse:", JSON.stringify(fromJson, null, 4));
+		console.log("Json5Cpp:", fromJson5Cpp);
+		console.log("JSON.parse:", fromJson);
 		console.log();
 		return;
 	}
@@ -87,8 +91,8 @@ function checkJson5(path) {
 	let d = diff(fromJson5Cpp, fromJson5);
 	if (d != null) {
 		console.log(path + ": parse difference:", d);
-		console.log("Json5Cpp:", JSON.stringify(fromJson5Cpp, null, 4));
-		console.log("JSON5.parse:", JSON.stringify(fromJson5, null, 4));
+		console.log("Json5Cpp:", fromJson5Cpp);
+		console.log("JSON5.parse:", fromJson5);
 		console.log();
 		return;
 	}
@@ -99,6 +103,11 @@ function checkJson5(path) {
 for (let parent of fs.readdirSync("json5-tests")) {
 	let parentPath = "json5-tests/" + parent;
 	if (parent[0] == ".") {
+		continue;
+	}
+
+	// The todo directory seems to contain stuff which isn't in the spec yet
+	if (parent == "todo") {
 		continue;
 	}
 
