@@ -4,12 +4,14 @@
 #include <json/json.h>
 #include <istream>
 #include <limits>
+#include <memory>
 
 namespace Json5 {
 
 bool parse(std::istream &is, Json::Value &v, int maxDepth = 100);
 
 namespace detail {
+
 // Skip to https://262.ecma-international.org/5.1/A#sec-7.3 LineTerminator
 inline void skipPastLineTerminator(std::istream &is) {
 	// I don't really want to parse UTF-8, so let's ignore U+2028 and U+2029
@@ -77,6 +79,7 @@ inline bool isIdentPartChar(int ch) {
 	return isIdentStartChar(ch) || (ch >= '0' && ch <= '9');
 }
 
+// https://262.ecma-international.org/5.1/#sec-7.6 IdentifierName
 inline bool readIdentifier(std::istream &is, std::string &str) {
 	if (!isIdentStartChar(is.peek())) {
 		return false;
@@ -187,12 +190,126 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 	}
 }
 
+// https://spec.json5.org/#numbers JSON5Number
 inline bool parseNumber(std::istream &is, Json::Value &v) {
-	// TODO
-	v = 0;
-	return true;
+	// Parsing floats accurately is hard.
+	// Instead, let's create a JSON string, then use jsoncpp to parse it.
+	std::string str;
+
+	bool negative = false;
+	int ch = is.peek();
+	if (ch == '+') {
+		is.get();
+		ch = is.peek();
+	} else if (ch == '-') {
+		negative = true;
+		str += '-';
+		is.get();
+		ch = is.peek();
+	}
+
+	if (ch == 'I' || ch == 'N') {
+		str.clear();
+		readIdentifier(is, str);
+		if (str == "Infinity") {
+			if (negative) {
+				v = -std::numeric_limits<double>::infinity();
+			} else {
+				v = std::numeric_limits<double>::infinity();
+			}
+			return true;
+		} else if (str == "NaN") {
+			// I assume negative NaN is just a normal NaN?
+			v = std::numeric_limits<double>::quiet_NaN();
+			return true;
+		} else {
+			return false;
+		}
+	} else if (ch == '.') {
+		// JSON doesn't support leading dots
+		str += '0';
+	} else if (ch == '0') {
+		str += '0';
+		is.get();
+		ch = is.peek();
+		if (ch == '.') {
+			str += '.';
+		} else if (ch == 'x' || ch == 'X') {
+			str += 'x';
+			is.get();
+			while (true) {
+				ch = is.peek();
+				if (!(
+						(ch >= '0' && ch <= '9') ||
+						(ch >= 'a' && ch <= 'f') ||
+						(ch >= 'A' && ch <= 'F'))) {
+					break;
+				}
+
+				str += ch;
+				is.get();
+			}
+
+			Json::CharReaderBuilder crb;
+			std::unique_ptr<Json::CharReader> reader{crb.newCharReader()};
+			return reader->parse(str.c_str(), str.c_str() + str.size(), &v, nullptr);
+		} else if (ch >= '0' && ch <= '9') {
+			return false;
+		} else {
+			v = 0;
+			return true;
+		}
+	}
+
+	// Optional integer part
+	while (ch >= '0' && ch <= '9') {
+		str += ch;
+		is.get();
+		ch = is.peek();
+	}
+
+	// Potentially trailing dot
+	if (ch == '.') {
+		str += '.';
+		is.get();
+		ch = is.peek();
+		// JSON doesn't support trailing dots
+		if (!(ch >= '0' && ch <= '9')) {
+			str += '0';
+		}
+	}
+
+	// Optional decimal part
+	while (ch >= '0' && ch <= '9') {
+		str += ch;
+		is.get();
+		ch = is.peek();
+	}
+
+	// Optional exponent part
+	if (ch == 'e' || ch == 'E') {
+		str += 'e';
+		is.get();
+		ch = is.peek();
+		if (ch == '+' || ch == '-') {
+			str += ch;
+			is.get();
+			ch = is.peek();
+		}
+
+		while (ch >= '0' && ch <= '9') {
+			str += ch;
+			is.get();
+			ch = is.peek();
+		}
+	}
+
+	Json::CharReaderBuilder crb;
+	std::unique_ptr<Json::CharReader> reader{crb.newCharReader()};
+	return reader->parse(str.c_str(), str.c_str() + str.size(), &v, nullptr);
 }
 
+// https://spec.json5.org/#prod-JSON5Object JSON5Object
 inline bool parseObject(std::istream &is, Json::Value &v, int maxDepth) {
 	is.get(); // '{'
 
@@ -238,6 +355,7 @@ inline bool parseObject(std::istream &is, Json::Value &v, int maxDepth) {
 	}
 }
 
+// https://spec.json5.org/#prod-JSON5Array JSON5Array
 inline bool parseArray(std::istream &is, Json::Value &v, int maxDepth) {
 	is.get(); // '['
 
@@ -264,8 +382,10 @@ inline bool parseArray(std::istream &is, Json::Value &v, int maxDepth) {
 		parse(is, v[index++], maxDepth);
 	}
 }
+
 }
 
+// https://spec.json5.org/#values JSON5Value
 inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
 	detail::skipWhitespace(is);
 	int ch = is.peek();

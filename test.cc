@@ -10,7 +10,7 @@ int main() {
 			// lol
 			"bar mitsva": "This is \
 			actually kinda cool",
-			somearr: [NaN, "true", false, ],
+			somearr: [NaN, "true", false, 100, 88.6, 4E-9],
 			/* meh */
 		}
 	)"};
