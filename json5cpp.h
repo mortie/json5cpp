@@ -10,9 +10,9 @@
 
 namespace Json5 {
 
-bool parse(std::istream &is, Json::Value &v, int maxDepth = 100);
-
 namespace detail {
+
+bool parseValue(std::istream &is, Json::Value &v, int maxDepth);
 
 // Skip to https://262.ecma-international.org/5.1/A#sec-7.3 LineTerminator
 inline void skipPastLineTerminator(std::istream &is) {
@@ -414,7 +414,7 @@ inline bool parseObject(std::istream &is, Json::Value &v, int maxDepth) {
 		}
 		is.get();
 
-		if (!parse(is, v[key], maxDepth)) {
+		if (!parseValue(is, v[key], maxDepth)) {
 			return false;
 		}
 	}
@@ -445,16 +445,14 @@ inline bool parseArray(std::istream &is, Json::Value &v, int maxDepth) {
 			return true;
 		}
 
-		if (!parse(is, v[index++], maxDepth)) {
+		if (!parseValue(is, v[index++], maxDepth)) {
 			return false;
 		}
 	}
 }
 
-}
-
 // https://spec.json5.org/#values JSON5Value
-inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
+inline bool parseValue(std::istream &is, Json::Value &v, int maxDepth) {
 	if (maxDepth < 0) {
 		return false;
 	}
@@ -475,10 +473,7 @@ inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
 		v = s;
 		return true;
 	} else if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '+' || ch == '-') {
-		if (!detail::parseNumber(is, v)) {
-			return false;
-		}
-		return true;
+		return detail::parseNumber(is, v);
 	} else {
 		std::string ident;
 		if (!detail::readIdentifier(is, ident)) {
@@ -487,23 +482,35 @@ inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
 
 		if (ident == "null") {
 			v = Json::nullValue;
-			return true;
 		} else if (ident == "true") {
 			v = true;
-			return true;
 		} else if (ident == "false") {
 			v = false;
-			return true;
 		} else if (ident == "Infinity") {
 			v = std::numeric_limits<double>::infinity();
-			return true;
 		} else if (ident == "NaN") {
 			v = std::numeric_limits<double>::quiet_NaN();
-			return true;
+		} else {
+			return false;
 		}
 	}
 
-	return false;
+	return true;
+}
+
+}
+
+inline bool parse(std::istream &is, Json::Value &v, int maxDepth = 100) {
+	if (!detail::parseValue(is, v, maxDepth)) {
+		return false;
+	}
+
+	detail::skipWhitespace(is);
+	if (is.peek() != EOF) {
+		return false;
+	}
+
+	return true;
 }
 
 }
