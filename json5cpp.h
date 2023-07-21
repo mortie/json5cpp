@@ -99,7 +99,7 @@ inline int hexChar(int ch) {
 	} else if (ch >= '0' && ch <= '9') {
 		return ch - '0';
 	} else if (ch >= 'a' && ch <= 'f') {
-		return ch - 'A' + 10;
+		return ch - 'a' + 10;
 	} else if (ch >= 'A' && ch <= 'Z') {
 		return ch - 'A' + 10;
 	} else {
@@ -179,6 +179,8 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 				if (ch == '\r' && is.peek() == '\n') {
 					str += is.get();
 				}
+			} else {
+				str += ch;
 			}
 		} else if (ch == '\n' || ch == '\r') {
 			// This is *not* ignoring the spec, line separator and paragraph separator
@@ -232,9 +234,7 @@ inline bool parseNumber(std::istream &is, Json::Value &v) {
 		str += '0';
 		is.get();
 		ch = is.peek();
-		if (ch == '.') {
-			str += '.';
-		} else if (ch == 'x' || ch == 'X') {
+		if (ch == 'x' || ch == 'X') {
 			str += 'x';
 			is.get();
 			while (true) {
@@ -253,9 +253,7 @@ inline bool parseNumber(std::istream &is, Json::Value &v) {
 			Json::CharReaderBuilder crb;
 			std::unique_ptr<Json::CharReader> reader{crb.newCharReader()};
 			return reader->parse(str.c_str(), str.c_str() + str.size(), &v, nullptr);
-		} else if (ch >= '0' && ch <= '9') {
-			return false;
-		} else {
+		} else if (!((ch >= '1' && ch <= '9') || ch == '.' || ch == 'e' || ch == 'E')) {
 			v = 0;
 			return true;
 		}
@@ -313,6 +311,7 @@ inline bool parseNumber(std::istream &is, Json::Value &v) {
 inline bool parseObject(std::istream &is, Json::Value &v, int maxDepth) {
 	is.get(); // '{'
 
+	v = Json::objectValue;
 	while (true) {
 		skipWhitespace(is);
 		int ch = is.peek();
@@ -359,6 +358,7 @@ inline bool parseObject(std::istream &is, Json::Value &v, int maxDepth) {
 inline bool parseArray(std::istream &is, Json::Value &v, int maxDepth) {
 	is.get(); // '['
 
+	v = Json::arrayValue;
 	Json::ArrayIndex index = 0;
 	while (true) {
 		skipWhitespace(is);
@@ -387,6 +387,10 @@ inline bool parseArray(std::istream &is, Json::Value &v, int maxDepth) {
 
 // https://spec.json5.org/#values JSON5Value
 inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
+	if (maxDepth < 0) {
+		return false;
+	}
+
 	detail::skipWhitespace(is);
 	int ch = is.peek();
 	if (ch == EOF) {
@@ -401,10 +405,12 @@ inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
 			return false;
 		}
 		v = s;
+		return true;
 	} else if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '+' || ch == '-') {
 		if (!detail::parseNumber(is, v)) {
 			return false;
 		}
+		return true;
 	} else {
 		std::string ident;
 		if (!detail::readIdentifier(is, ident)) {
@@ -413,16 +419,19 @@ inline bool parse(std::istream &is, Json::Value &v, int maxDepth) {
 
 		if (ident == "null") {
 			v = Json::nullValue;
+			return true;
 		} else if (ident == "true") {
 			v = true;
+			return true;
 		} else if (ident == "false") {
 			v = false;
+			return true;
 		} else if (ident == "Infinity") {
 			v = std::numeric_limits<double>::infinity();
+			return true;
 		} else if (ident == "NaN") {
 			v = std::numeric_limits<double>::quiet_NaN();
-		} else {
-			return false;
+			return true;
 		}
 	}
 
