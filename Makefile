@@ -1,13 +1,11 @@
 CXXFLAGS += -g -std=c++11 $(shell pkg-config --libs --cflags jsoncpp)
 
-DESTDIR ?= .
-
-$(DESTDIR)/json5: cmd/json5.cc json5cpp.h
+json5: cmd/json5.cc json5cpp.h
 	$(CXX) -I. $(CXXFLAGS) -o $@ $<
 
 .PHONY: clean
 clean:
-	rm -rf $(DESTDIR)/json5 $(DESTDIR)/json5.dSYM
+	rm -rf json5 json5.dSYM
 
 .PHONY: fuzz
 fuzz:

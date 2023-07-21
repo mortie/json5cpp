@@ -54,8 +54,9 @@ function diff(a, b) {
 let numTests = 0;
 let numSuccesses = 0;
 
-function checkJson(path) {
+function check(path, impl, implName) {
 	numTests += 1;
+	process.stderr.write("\r[" + numTests + "] ");
 	let fromJson5Cpp;
 	try {
 		fromJson5Cpp = runJson5Cpp(path);
@@ -64,12 +65,12 @@ function checkJson(path) {
 		return;
 	}
 
-	let fromJson = JSON.parse(fs.readFileSync(path));
-	let d = diff(fromJson5Cpp, fromJson);
+	let fromImpl = impl.parse(fs.readFileSync(path));
+	let d = diff(fromJson5Cpp, fromImpl);
 	if (d != null) {
 		console.log(path + ": parse difference:", d);
 		console.log("Json5Cpp:", fromJson5Cpp);
-		console.log("JSON.parse:", fromJson);
+		console.log(implName + ".parse:", fromImpl);
 		console.log();
 		return;
 	}
@@ -77,27 +78,12 @@ function checkJson(path) {
 	numSuccesses += 1;
 }
 
+function checkJson(path) {
+	check(path, JSON, "JSON");
+}
+
 function checkJson5(path) {
-	numTests += 1;
-	let fromJson5Cpp;
-	try {
-		fromJson5Cpp = runJson5Cpp(path);
-	} catch (ex) {
-		console.log(path + ": failed to parse:", ex);
-		return;
-	}
-
-	let fromJson5 = JSON5.parse(fs.readFileSync(path));
-	let d = diff(fromJson5Cpp, fromJson5);
-	if (d != null) {
-		console.log(path + ": parse difference:", d);
-		console.log("Json5Cpp:", fromJson5Cpp);
-		console.log("JSON5.parse:", fromJson5);
-		console.log();
-		return;
-	}
-
-	numSuccesses += 1;
+	check(path, JSON5, "JSON5");
 }
 
 for (let parent of fs.readdirSync("json5-tests")) {
@@ -133,7 +119,7 @@ for (let entry of fs.readdirSync("JSONTestSuite/test_parsing")) {
 	}
 }
 
-console.log(numSuccesses + "/" + numTests + " tests succeeded.");
+console.log("\r" + numSuccesses + "/" + numTests + " tests succeeded.");
 if (numSuccesses == numTests) {
 	process.exit(0);
 } else {
