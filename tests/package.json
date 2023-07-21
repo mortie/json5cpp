@@ -1,0 +1,11 @@
+{
+  "name": "json5cpp-tests",
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "type": "module",
+  "license": "ISC",
+  "dependencies": {
+    "json5": "^2.2.3"
+  }
+}
