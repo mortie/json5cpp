@@ -4,3 +4,4 @@
 /test.dSYM
 /.cache
 /compile_commands.json
+/fuzz-data
