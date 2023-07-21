@@ -6,6 +6,8 @@
 #include <limits>
 #include <memory>
 
+#include <iostream>
+
 namespace Json5 {
 
 bool parse(std::istream &is, Json::Value &v, int maxDepth = 100);
@@ -108,17 +110,39 @@ inline int hexChar(int ch) {
 }
 
 // Write a code point (up to 16 bit) as UTF-8
-inline void writeU16Utf8(unsigned int num, std::string &str) {
-	if (num >= 0x0800u) {
-		str += 0xe0 | ((num & 0xf000u) >> 12u);
-		str += 0x80 | ((num & 0x0fc0u) >> 6u);
-		str += 0x80 | ((num & 0x003fu) >> 0u);
+inline void writeUtf8(unsigned int num, std::string &str) {
+	if (num >= 0x10000u) {
+		str += 0xf0u | ((num & 0x1c0000u) >> 18u);
+		str += 0x80u | ((num & 0x03f000u) >> 12u);
+		str += 0x80u | ((num & 0x000fc0u) >> 6u);
+		str += 0x80u | ((num & 0x00003fu) >> 0u);
+	} else if (num >= 0x0800u) {
+		str += 0xe0u | ((num & 0x00f000u) >> 12u);
+		str += 0x80u | ((num & 0x000fc0u) >> 6u);
+		str += 0x80u | ((num & 0x00003fu) >> 0u);
 	} else if (num >= 0x0080u) {
-		str += 0xc0 | ((num & 0x07c0) >> 6);
-		str += 0x80 | ((num & 0x003f) >> 0);
+		str += 0xc0u | ((num & 0x0007c0u) >> 6);
+		str += 0x80u | ((num & 0x00003fu) >> 0);
 	} else {
 		str += num;
 	}
+}
+
+inline bool read4Hex(std::istream &is, unsigned int &u) {
+	int a = hexChar(is.get());
+	int b = hexChar(is.get());
+	int c = hexChar(is.get());
+	int d = hexChar(is.get());
+	if (a == EOF || b == EOF || c == EOF || d == EOF) {
+		return false;
+	}
+
+	u =
+		((unsigned int)a << 12) |
+		((unsigned int)b << 8) |
+		((unsigned int)c << 4) |
+		((unsigned int)d << 0);
+	return true;
 }
 
 // https://spec.json5.org/#strings JSON5String
@@ -153,25 +177,40 @@ inline bool readStringLiteral(std::istream &is, std::string &str) {
 				}
 				str += (a << 4) | b;
 			} else if (ch == 'u') {
-				// The IETF JSON spec explicitly says that Unicode code points bigger than 2^16
-				// can be represented as two "\uXXXX" escapes which represent the code points
-				// for a UTF-16 surrogate pair. However, the ECMA spec, which JSON5 references,
-				// says nothing about that.
-				// Dealing with surrogate pairs sounds terrible, so I'm not gonna do it.
-				int a = hexChar(is.get());
-				int b = hexChar(is.get());
-				int c = hexChar(is.get());
-				int d = hexChar(is.get());
-				if (a == EOF || b == EOF || c == EOF || d == EOF) {
+				unsigned int u1;
+				if (!read4Hex(is, u1)) {
 					return false;
 				}
 
-				unsigned int u =
-					((unsigned int)a << 12) |
-					((unsigned int)b << 8) |
-					((unsigned int)c << 4) |
-					((unsigned int)d << 0);
-				writeU16Utf8(u, str);
+				if (u1 >= 0xd800u && u1 <= 0xdbffu) {
+					// Don't allow unpaired surrogates
+					if (is.peek() != '\\') {
+						return false;
+					}
+					is.get();
+
+					if (is.peek() != 'u') {
+						return false;
+					}
+					is.get();
+
+					unsigned int u2;
+					if (!read4Hex(is, u2)) {
+						return false;
+					}
+
+					if (!(u2 >= 0xdc00u && u2 <= 0xdfffu)) {
+						// Don't pair the high surrogate with a non-low-surrogate
+						return false;
+					}
+
+					writeUtf8((u1 - 0xd800u) * 0x400u + u2 - 0xdc00u + 0x10000u, str);
+				} else if (u1 >= 0xdc00u && u1 <= 0xdfffu) {
+					// Don't allow unpaired surrogates
+					return false;
+				} else {
+					writeUtf8(u1, str);
+				}
 			} else if (ch == '\n' || ch == '\r') {
 				// Ignore line separator and paragraph separator, because again,
 				// I don't wanna deal with parsing UTF-8
