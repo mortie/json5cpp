@@ -322,7 +322,7 @@ inline bool parseNumber(std::istream &is, Json::Value &v) {
 		ch = is.peek();
 		if (ch == 'x' || ch == 'X') {
 			is.get();
-			long long number = 0;
+			Json::UInt64 number = 0;
 			int digit = hexChar(is.peek());
 			if (digit == EOF) {
 				return false;
@@ -342,7 +342,7 @@ inline bool parseNumber(std::istream &is, Json::Value &v) {
 			}
 
 			if (negative) {
-				v = -number;
+				v = -(Json::Int64)number;
 			} else {
 				v = number;
 			}

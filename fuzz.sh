@@ -4,7 +4,7 @@ set -e
 
 rm -rf fuzz-data
 mkdir -p fuzz-data
-make CXX=afl-c++ DESTDIR=./fuzz-data
+make CXX=afl-c++ OUT=./fuzz-data
 
 mkdir -p fuzz-data/seeds
 echo '100' > fuzz-data/seeds/number.json
