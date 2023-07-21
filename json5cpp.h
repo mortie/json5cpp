@@ -321,24 +321,33 @@ inline bool parseNumber(std::istream &is, Json::Value &v) {
 		is.get();
 		ch = is.peek();
 		if (ch == 'x' || ch == 'X') {
-			str += 'x';
 			is.get();
+			long long number = 0;
+			int digit = hexChar(is.peek());
+			if (digit == EOF) {
+				return false;
+			}
+			number += digit;
+			is.get();
+
 			while (true) {
 				ch = is.peek();
-				if (!(
-						(ch >= '0' && ch <= '9') ||
-						(ch >= 'a' && ch <= 'f') ||
-						(ch >= 'A' && ch <= 'F'))) {
+				digit = hexChar(ch);
+				if (digit == EOF) {
 					break;
 				}
-
-				str += ch;
+				number <<= 4;
+				number += digit;
 				is.get();
 			}
 
-			Json::CharReaderBuilder crb;
-			std::unique_ptr<Json::CharReader> reader{crb.newCharReader()};
-			return reader->parse(str.c_str(), str.c_str() + str.size(), &v, nullptr);
+			if (negative) {
+				v = -number;
+			} else {
+				v = number;
+			}
+
+			return true;
 		} else if (!((ch >= '1' && ch <= '9') || ch == '.' || ch == 'e' || ch == 'E')) {
 			v = 0;
 			return true;
