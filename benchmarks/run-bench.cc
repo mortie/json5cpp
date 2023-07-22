@@ -98,4 +98,7 @@ int main() {
 	}
 	json += "}";
 	benchAll("Big Object Of Numbers", json);
+
+	json = R"({"oid":"6e1ef259b54c3639440c970bb0c438e0064bb4f4","url":"/mortie/json5cpp/commit/6e1ef259b54c3639440c970bb0c438e0064bb4f4","date":"2023-07-21T21:58:51.000+02:00","shortMessageHtmlLink":"<a data-pjax=\"true\" title=\"improve and flesh out tests\" class=\"Link--secondary\" href=\"/mortie/json5cpp/commit/6e1ef259b54c3639440c970bb0c438e0064bb4f4\">improve and flesh out tests</a>","bodyMessageHtml":"","author":{"displayName":"Martin Dørum","login":"mortie","path":"/mortie","avatarUrl":"https://avatars.githubusercontent.com/u/3728194?s=40&v=4"},"status":null,"isSpoofed":false})";
+	benchAll("GitHub REST Response", json);
 }
