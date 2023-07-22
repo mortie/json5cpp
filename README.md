@@ -53,7 +53,7 @@ No \\n's!",
 }
 ```
 
-## Run tests
+## Tests
 
 Run tests with: `make check`. This depends on git, npm and node.
 
@@ -67,44 +67,55 @@ for all JSON5 files in the set.
 There are currently 175 test JSON and JSON5 files.
 All tests pass.
 
-## Run benchmarks
+## Benchmarks
 
 Run benchmarks with: `make bench`.
 
 The benchmarking suite compares Json5Cpp against JsonCpp.
 In my testing, Json5Cpp turns out faster than JsonCpp across the board,
 ranging from a bit faster for large objects compared to a lot faster for small.
+JsonCpp's data model precludes it from being insanely fast,
+and the `Json::Value` API requires annoying unnecessary string copies,
+but it's nice to know that Json5Cpp at least isn't slower.
 
 Here's a typical run on an Intel machine:
 
 ```
 Benchmark 'Tiny':
-Json5Cpp: 617ns
+Json5Cpp: 614ns
 JsonCpp:  13μs
 
 Benchmark 'Big Nested String Array':
-Json5Cpp: 244ms
+Json5Cpp: 246ms
 JsonCpp:  295ms
 
 Benchmark 'Big Object Of Numbers':
-Json5Cpp: 46ms
+Json5Cpp: 47ms
 JsonCpp:  62ms
+
+Benchmark 'GitHub REST Response':
+Json5Cpp: 14μs
+JsonCpp:  30μs
 ```
 
 And a typical run on my Apple ARM laptop:
 
 ```
 Benchmark 'Tiny':
-Json5Cpp: 83ns
-JsonCpp:  1625ns
+Json5Cpp: 82ns
+JsonCpp:  1598ns
 
 Benchmark 'Big Nested String Array':
-Json5Cpp: 43ms
+Json5Cpp: 42ms
 JsonCpp:  52ms
 
 Benchmark 'Big Object Of Numbers':
 Json5Cpp: 21ms
 JsonCpp:  38ms
+
+Benchmark 'GitHub REST Response':
+Json5Cpp: 3206ns
+JsonCpp:  6954ns
 ```
 
 Feel free to contribute more benchmarks.
