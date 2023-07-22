@@ -67,6 +67,48 @@ for all JSON5 files in the set.
 There are currently 175 test JSON and JSON5 files.
 All tests pass.
 
+## Run benchmarks
+
+Run benchmarks with: `make bench`.
+
+The benchmarking suite compares Json5Cpp against JsonCpp.
+In my testing, Json5Cpp turns out faster than JsonCpp across the board,
+ranging from a bit faster for large objects compared to a lot faster for small.
+
+Here's a typical run on an Intel machine:
+
+```
+Benchmark 'Tiny':
+Json5Cpp: 617ns
+JsonCpp:  13μs
+
+Benchmark 'Big Nested String Array':
+Json5Cpp: 244ms
+JsonCpp:  295ms
+
+Benchmark 'Big Object Of Numbers':
+Json5Cpp: 46ms
+JsonCpp:  62ms
+```
+
+And a typical run on my Apple ARM laptop:
+
+```
+Benchmark 'Tiny':
+Json5Cpp: 83ns
+JsonCpp:  1625ns
+
+Benchmark 'Big Nested String Array':
+Json5Cpp: 43ms
+JsonCpp:  52ms
+
+Benchmark 'Big Object Of Numbers':
+Json5Cpp: 21ms
+JsonCpp:  38ms
+```
+
+Feel free to contribute more benchmarks.
+
 ## Fuzzing
 
 Install [AFLplusplus](https://aflplus.plus/) (`sudo apt install afl++` on Ubuntu),
