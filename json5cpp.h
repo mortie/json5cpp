@@ -1,4 +1,4 @@
-/* Json5Cpp, a JSON5 parser -- https://github.com/mortie/json5cpp */
+/* Json5Cpp, a JSON5 parser -- v1.0.0 -- https://github.com/mortie/json5cpp */
 
 /*
  * Copyright (c) 2023 Martin Dørum
