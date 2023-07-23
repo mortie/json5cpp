@@ -1,5 +1,5 @@
 /json5
-/json5.dSYM
-/.cache
-/compile_commands.json
 /fuzz-data
+*.dSYM
+.cache
+compile_commands.json
