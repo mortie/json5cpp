@@ -77,51 +77,58 @@ All tests pass.
 
 Run benchmarks with: `make bench`.
 
-The benchmarking suite compares Json5Cpp against JsonCpp.
-In my testing, Json5Cpp turns out faster than JsonCpp across the board,
-ranging from a bit faster for large objects compared to a lot faster for small.
-JsonCpp's data model precludes it from being insanely fast,
-and the `Json::Value` API requires annoying unnecessary string copies,
-but it's nice to know that Json5Cpp at least isn't slower.
+The benchmarking suite compares Json5Cpp against
+[JsonCpp](https://github.com/open-source-parsers/jsoncpp) and
+[nlohmann/json](https://github.com/nlohmann/json).
+In my testing, Json5Cpp turns out a bit faster than JsonCpp across the board,
+and trades blows with nlohmann/json.
 
-Here's a typical run on an Intel machine:
+Here's a typical run on my AMD R9 5950X:
 
 ```
 Benchmark 'Tiny':
-Json5Cpp: 614ns
-JsonCpp:  13μs
+Json5Cpp: 88ns
+JsonCpp:  1924ns
+Nlohmann: 124ns
 
 Benchmark 'Big Nested String Array':
-Json5Cpp: 246ms
-JsonCpp:  295ms
+Json5Cpp: 55ms
+JsonCpp:  60ms
+Nlohmann: 37ms
 
 Benchmark 'Big Object Of Numbers':
-Json5Cpp: 47ms
-JsonCpp:  62ms
+Json5Cpp: 15ms
+JsonCpp:  22ms
+Nlohmann: 31ms
 
 Benchmark 'GitHub REST Response':
-Json5Cpp: 14μs
-JsonCpp:  30μs
+Json5Cpp: 2906ns
+JsonCpp:  5811ns
+Nlohmann: 5007ns
 ```
 
-And a typical run on my Apple ARM laptop:
+And a typical run on my Apple M1 Pro:
 
 ```
 Benchmark 'Tiny':
 Json5Cpp: 82ns
-JsonCpp:  1598ns
+JsonCpp:  1599ns
+Nlohmann: 139ns
 
 Benchmark 'Big Nested String Array':
-Json5Cpp: 42ms
-JsonCpp:  52ms
+Json5Cpp: 43ms
+JsonCpp:  53ms
+Nlohmann: 30ms
 
 Benchmark 'Big Object Of Numbers':
 Json5Cpp: 21ms
 JsonCpp:  38ms
+Nlohmann: 22ms
 
 Benchmark 'GitHub REST Response':
-Json5Cpp: 3206ns
-JsonCpp:  6954ns
+Json5Cpp: 3268ns
+JsonCpp:  6960ns
+Nlohmann: 3920ns
 ```
 
 Feel free to contribute more benchmarks.

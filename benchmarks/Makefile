@@ -1,6 +1,6 @@
 CXXFLAGS += \
 	-O3 -std=c++11 \
-	$(shell pkg-config --libs --cflags jsoncpp)
+	$(shell pkg-config --libs --cflags jsoncpp nlohmann_json)
 
 .PHONY: bench
 bench: run-bench
