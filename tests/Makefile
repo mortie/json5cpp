@@ -3,7 +3,7 @@ CXXFLAGS += \
 	$(shell pkg-config --libs --cflags jsoncpp)
 
 .PHONY: check
-check: .prepared.stamp json5
+check: .prepared.stamp json5-to-json
 	node run-tests.js
 
 .prepared.stamp:
@@ -15,11 +15,11 @@ check: .prepared.stamp json5
 	cd JSONTestSuite && git checkout d64aefb55228d9584d3e5b2433f720ea8fd00c82
 	touch $@
 
-json5: ../cmd/json5.cc ../json5cpp.h
+json5-to-json: ../examples/json5-to-json.cc ../json5cpp.h
 	$(CXX) -I.. -o $@ $< $(CXXFLAGS)
 
 .PHONY: clean
 clean:
 	rm -f .prepared.stamp
 	rm -rf node_modules json5-tests JSONTestSuite
-	rm -rf json5 json5.dSYM
+	rm -rf json5-to-json json5-to-json.dSYM

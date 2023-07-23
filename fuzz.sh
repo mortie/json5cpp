@@ -15,9 +15,9 @@ mkdir -p fuzz-data/output
 
 cd fuzz-data
 
-afl-fuzz -i seeds -o output -M "json5-fuzzer-1" -- ./json5 &
+afl-fuzz -i seeds -o output -M "json5-fuzzer-1" -- ./json5-to-json &
 for i in $(seq 2 20); do
-	afl-fuzz -i seeds -o output -S "json5-fuzzer-$i" -- ./json5 >/dev/null &
+	afl-fuzz -i seeds -o output -S "json5-fuzzer-$i" -- ./json5-to-json >/dev/null &
 done
 
 wait

@@ -1,4 +1,4 @@
-/json5
+/json5-to-json
 /fuzz-data
 *.dSYM
 .cache

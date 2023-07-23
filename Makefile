@@ -2,12 +2,12 @@ OUT ?= .
 
 CXXFLAGS += -g -std=c++11 $(shell pkg-config --libs --cflags jsoncpp)
 
-$(OUT)/json5: cmd/json5.cc json5cpp.h
+$(OUT)/json5-to-json: examples/json5-to-json.cc json5cpp.h
 	$(CXX) -I. -o $@ $< $(CXXFLAGS)
 
 .PHONY: clean
 clean:
-	rm -rf json5 json5.dSYM
+	rm -rf json5-to-json json5-to-json.dSYM
 
 .PHONY: fuzz
 fuzz:

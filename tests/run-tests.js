@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as child_process from 'child_process';
 
 function runJson5Cpp(path) {
-	return JSON.parse(child_process.spawnSync("./json5", [path]).stdout);
+	return JSON.parse(child_process.spawnSync("./json5-to-json", [path]).stdout);
 }
 
 function diff(a, b) {

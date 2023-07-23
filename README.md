@@ -37,9 +37,9 @@ int main() {
 }
 ```
 
-For a slightly bigger example, this repo contains a `json5` command
-which reads JOSN5 and outputs JSON:
-[cmd/json5.cc](./cmd/json5.cc).
+For a slightly bigger example, this repo contains a `json5-to-json` example program
+which reads JOSN5 files and outputs JSON:
+[examples/json5-to-json.cc](./examples/json5-to-json.cc).
 
 Here's an example JSON5 document which showcases some of its features
 (stolen from [json5.org](https://json5.org/)):
