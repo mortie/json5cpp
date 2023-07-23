@@ -36,6 +36,11 @@ namespace Json5 {
 
 namespace detail {
 
+struct Location {
+	int line = 1;
+	int ch = 1;
+};
+
 class Reader {
 public:
 	Reader(std::istream &is): is_(is) {
@@ -58,6 +63,15 @@ public:
 		int ch = peek();
 		index_ += 1;
 		return ch;
+		loc_.ch += 1;
+		if (ch == '\n') {
+			loc_.ch = 1;
+			loc_.line += 1;
+		}
+	}
+
+	Location loc() {
+		return loc_;
 	}
 
 	Json::CharReader &jsonCharReader() {
@@ -78,18 +92,32 @@ private:
 		memmove(buffer_, buffer_ + index_, size_ - index_);
 		size_ -= index_;
 		index_ = 0;
-		size_ += is_.rdbuf()->sgetn(buffer_ + size_, sizeof(buffer_) - size_);
+		size_ += is_.read(buffer_ + size_, sizeof(buffer_) - size_).gcount();
 	}
 
 	std::istream &is_;
 	char buffer_[128];
 	size_t index_ = 0;
 	size_t size_ = 0;
+	Location loc_;
+	std::string *err_;
 
 	std::unique_ptr<Json::CharReader> jsonCharReader_;
 };
 
-bool parseValue(Reader &r, Json::Value &v, int maxDepth);
+bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth);
+
+inline void error(Location loc, std::string *err, const char *what) {
+	if (!err) {
+		return;
+	}
+
+	*err = std::to_string(loc.line);
+	*err += ':';
+	*err += std::to_string(loc.ch);
+	*err += ": ";
+	*err += what;
+}
 
 // Skip to https://262.ecma-international.org/5.1/A#sec-7.3 LineTerminator
 inline void skipPastLineTerminator(Reader &r) {
@@ -154,8 +182,9 @@ inline bool isIdentPartChar(int ch) {
 }
 
 // https://262.ecma-international.org/5.1/#sec-7.6 IdentifierName
-inline bool readIdentifier(Reader &r, std::string &str) {
+inline bool readIdentifier(Reader &r, std::string &str, std::string *err) {
 	if (!isIdentStartChar(r.peek())) {
+		error(r.loc(), err, "Invalid start character in identifier");
 		return false;
 	}
 
@@ -200,12 +229,14 @@ inline void writeUtf8(unsigned int num, std::string &str) {
 	}
 }
 
-inline bool read4Hex(Reader &r, unsigned int &u) {
+inline bool read4Hex(Reader &r, unsigned int &u, std::string *err) {
+	Location loc = r.loc();
 	int a = hexChar(r.get());
 	int b = hexChar(r.get());
 	int c = hexChar(r.get());
 	int d = hexChar(r.get());
 	if (a == EOF || b == EOF || c == EOF || d == EOF) {
+		error(loc, err, "Invalid hex sequence");
 		return false;
 	}
 
@@ -217,33 +248,37 @@ inline bool read4Hex(Reader &r, unsigned int &u) {
 	return true;
 }
 
-inline bool readUnicodeEscape(Reader &r, std::string &str) {
+inline bool readUnicodeEscape(Reader &r, std::string &str, std::string *err) {
 	// Assume we have already read the first '\' and 'u'
 
 	unsigned int u1;
-	if (!read4Hex(r, u1)) {
+	if (!read4Hex(r, u1, err)) {
 		return false;
 	}
 
+	Location loc = r.loc();
 	if (u1 >= 0xd800u && u1 <= 0xdbffu) {
 		// First character was a high surrogate, read the low surrogate
 		if (r.peek() != '\\') {
+			error(loc, err, "Expected trailing surrogate");
 			return false;
 		}
 		r.get();
 
 		if (r.peek() != 'u') {
+			error(loc, err, "Expected trailing surrogate");
 			return false;
 		}
 		r.get();
 
 		unsigned int u2;
-		if (!read4Hex(r, u2)) {
+		if (!read4Hex(r, u2, err)) {
 			return false;
 		}
 
 		if (!(u2 >= 0xdc00u && u2 <= 0xdfffu)) {
 			// Don't pair the high surrogate with a non-low-surrogate
+			error(loc, err, "Expected trailing surrogate");
 			return false;
 		}
 
@@ -251,6 +286,7 @@ inline bool readUnicodeEscape(Reader &r, std::string &str) {
 		return true;
 	} else if (u1 >= 0xdc00u && u1 <= 0xdfffu) {
 		// Don't allow unpaired surrogates
+		error(loc, err, "Invalid trailing surrogate");
 		return false;
 	} else {
 		writeUtf8(u1, str);
@@ -259,18 +295,20 @@ inline bool readUnicodeEscape(Reader &r, std::string &str) {
 }
 
 // https://spec.json5.org/#strings JSON5String
-inline bool readStringLiteral(Reader &r, std::string &str) {
+inline bool readStringLiteral(Reader &r, std::string &str, std::string *err) {
 	int startChar = r.get(); // '"' or "'"
 
 	while (true) {
 		int ch = r.get();
 		if (ch == EOF) {
+			error(r.loc(), err, "Unexpected EOF");
 			return false;
 		} else if (ch == startChar) {
 			return true;
 		} else if (ch == '\\') {
 			ch = r.get();
 			if (ch == EOF) {
+				error(r.loc(), err, "Unexpected EOF");
 				return false;
 			} else if (ch == 'b') {
 				str += '\b';
@@ -297,14 +335,16 @@ inline bool readStringLiteral(Reader &r, std::string &str) {
 					str += '\0';
 				}
 			} else if (ch == 'x') {
+				Location loc = r.loc();
 				int a = hexChar(r.get());
 				int b = hexChar(r.get());
 				if (a == EOF || b == EOF) {
+					error(loc, err, "Invalid hex sequence");
 					return false;
 				}
 				str += (a << 4) | b;
 			} else if (ch == 'u') {
-				readUnicodeEscape(r, str);
+				readUnicodeEscape(r, str, err);
 			} else if (ch == '\n' || ch == '\r') {
 				// Ignore line separator and paragraph separator, because again,
 				// I don't wanna deal with parsing UTF-8
@@ -321,6 +361,7 @@ inline bool readStringLiteral(Reader &r, std::string &str) {
 		} else if (ch == '\n' || ch == '\r') {
 			// This is *not* ignoring the spec, line separator and paragraph separator
 			// are explicitly allowed in JSON5 strings!
+			error(r.loc(), err, "Unescaped line terminator in string literal");
 			return false;
 		} else {
 			str += ch;
@@ -329,9 +370,10 @@ inline bool readStringLiteral(Reader &r, std::string &str) {
 }
 
 // https://spec.json5.org/#numbers JSON5Number
-inline bool parseNumber(Reader &r, Json::Value &v) {
+inline bool parseNumber(Reader &r, Json::Value &v, std::string *err) {
 	// Parsing floats accurately is hard.
 	// Instead, let's create a JSON string, then use jsoncpp to parse it.
+	Location loc = r.loc();
 	std::string str;
 
 	bool negative = false;
@@ -348,7 +390,7 @@ inline bool parseNumber(Reader &r, Json::Value &v) {
 
 	if (ch == 'I' || ch == 'N') {
 		str.clear();
-		readIdentifier(r, str);
+		readIdentifier(r, str, err);
 		if (str == "Infinity") {
 			if (negative) {
 				v = -std::numeric_limits<double>::infinity();
@@ -361,6 +403,7 @@ inline bool parseNumber(Reader &r, Json::Value &v) {
 			v = std::numeric_limits<double>::quiet_NaN();
 			return true;
 		} else {
+			error(loc, err, "Invalid number");
 			return false;
 		}
 	} else if (ch == '.') {
@@ -375,6 +418,7 @@ inline bool parseNumber(Reader &r, Json::Value &v) {
 			Json::UInt64 number = 0;
 			int digit = hexChar(r.peek());
 			if (digit == EOF) {
+				error(r.loc(), err, "Unexpected EOF");
 				return false;
 			}
 			number += digit;
@@ -447,25 +491,33 @@ inline bool parseNumber(Reader &r, Json::Value &v) {
 		}
 	}
 
-	return r.jsonCharReader().parse(
-		str.c_str(), str.c_str() + str.size(), &v, nullptr);
+	if (!r.jsonCharReader().parse(
+			str.c_str(), str.c_str() + str.size(), &v, nullptr)) {
+		error(loc, err, "Invalid number");
+		return false;
+	}
+
+	return true;
 }
 
 // https://spec.json5.org/#prod-JSON5Object JSON5Object
-inline bool parseObject(Reader &r, Json::Value &v, int maxDepth) {
+inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
 	r.get(); // '{'
 
 	v = Json::objectValue;
 	while (true) {
 		skipWhitespace(r);
+
 		int ch = r.peek();
 		if (ch == EOF) {
+			error(r.loc(), err, "Unexpected EOF");
 			return false;
 		} else if (ch == ',') {
 			r.get();
 			skipWhitespace(r);
 			ch = r.peek();
 			if (ch == EOF) {
+				error(r.loc(), err, "Unexpected EOF");
 				return false;
 			}
 		}
@@ -477,11 +529,11 @@ inline bool parseObject(Reader &r, Json::Value &v, int maxDepth) {
 
 		std::string key;
 		if (ch == '"' | ch == '\'') {
-			if (!readStringLiteral(r, key)) {
+			if (!readStringLiteral(r, key, err)) {
 				return false;
 			}
 		} else {
-			if (!readIdentifier(r, key)) {
+			if (!readIdentifier(r, key, err)) {
 				return false;
 			}
 		}
@@ -490,18 +542,19 @@ inline bool parseObject(Reader &r, Json::Value &v, int maxDepth) {
 
 		ch = r.peek();
 		if (ch != ':') {
+			error(r.loc(), err, "Expected colon ':'");
 			return false;
 		}
 		r.get();
 
-		if (!parseValue(r, v[key], maxDepth)) {
+		if (!parseValue(r, v[key], err, maxDepth)) {
 			return false;
 		}
 	}
 }
 
 // https://spec.json5.org/#prod-JSON5Array JSON5Array
-inline bool parseArray(Reader &r, Json::Value &v, int maxDepth) {
+inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
 	r.get(); // '['
 
 	v = Json::arrayValue;
@@ -510,12 +563,14 @@ inline bool parseArray(Reader &r, Json::Value &v, int maxDepth) {
 		skipWhitespace(r);
 		int ch = r.peek();
 		if (ch == EOF) {
+			error(r.loc(), err, "Unexpected EOF");
 			return false;
 		} else if (ch == ',') {
 			r.get();
 			skipWhitespace(r);
 			ch = r.peek();
 			if (ch == EOF) {
+				error(r.loc(), err, "Unexpected EOF");
 				return false;
 			}
 		}
@@ -525,38 +580,41 @@ inline bool parseArray(Reader &r, Json::Value &v, int maxDepth) {
 			return true;
 		}
 
-		if (!parseValue(r, v[index++], maxDepth)) {
+		if (!parseValue(r, v[index++], err, maxDepth)) {
 			return false;
 		}
 	}
 }
 
 // https://spec.json5.org/#values JSON5Value
-inline bool parseValue(Reader &r, Json::Value &v, int maxDepth) {
+inline bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
 	if (maxDepth < 0) {
+		error(r.loc(), err, "Depth limit reached");
 		return false;
 	}
 
 	detail::skipWhitespace(r);
+	Location loc = r.loc();
 	int ch = r.peek();
 	if (ch == EOF) {
+		error(loc, err, "Unexpected EOF");
 		return false;
 	} else if (ch == '{') {
-		return detail::parseObject(r, v, maxDepth - 1);
+		return detail::parseObject(r, v, err, maxDepth - 1);
 	} else if (ch == '[') {
-		return detail::parseArray(r, v, maxDepth - 1);
+		return detail::parseArray(r, v, err, maxDepth - 1);
 	} else if (ch == '"' || ch == '\'') {
 		std::string s;
-		if (!detail::readStringLiteral(r, s)) {
+		if (!detail::readStringLiteral(r, s, err)) {
 			return false;
 		}
 		v = s;
 		return true;
 	} else if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '+' || ch == '-') {
-		return detail::parseNumber(r, v);
+		return detail::parseNumber(r, v, err);
 	} else {
 		std::string ident;
-		if (!detail::readIdentifier(r, ident)) {
+		if (!detail::readIdentifier(r, ident, err)) {
 			return false;
 		}
 
@@ -571,6 +629,7 @@ inline bool parseValue(Reader &r, Json::Value &v, int maxDepth) {
 		} else if (ident == "NaN") {
 			v = std::numeric_limits<double>::quiet_NaN();
 		} else {
+			error(loc, err, "Invalid keyword");
 			return false;
 		}
 	}
@@ -580,15 +639,18 @@ inline bool parseValue(Reader &r, Json::Value &v, int maxDepth) {
 
 }
 
-inline bool parse(std::istream &is, Json::Value &v, int maxDepth = 100) {
+inline bool parse(
+		std::istream &is, Json::Value &v,
+		std::string *err = nullptr, int maxDepth = 100) {
 	detail::Reader r(is);
 
-	if (!detail::parseValue(r, v, maxDepth)) {
+	if (!detail::parseValue(r, v, err, maxDepth)) {
 		return false;
 	}
 
 	detail::skipWhitespace(r);
 	if (r.peek() != EOF) {
+		detail::error(r.loc(), err, "Trailing garbage");
 		return false;
 	}
 

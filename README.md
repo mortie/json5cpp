@@ -8,10 +8,15 @@ Like JsonCpp, it requires C++11.
 The API is simple, just one function with this signature:
 
 ```c++
-bool Json5::parse(std::istream &, Json::Value &);
+bool Json5::parse(
+        std::istream &, Json::Value &,
+        std::string *err = nullptr, int maxDepth = 100);
 ```
 
 It returns `true` on success, `false` on error.
+If an error occurs, the string pointed to by `err` will be filled with an error message,
+if it's not null.
+The `maxDepth` argument sets the recursion limit.
 
 ## Examples
 
@@ -23,10 +28,11 @@ Here's a minimal program which reads JSON5 from stdin and writes JSON to stdout:
 
 int main() {
     Json::Value value;
-    if (Json5::parse(std::cin, value)) {
+    std::string err;
+    if (Json5::parse(std::cin, value, &err)) {
         std::cout << value << '\n';
     } else {
-        std::cerr << "Invalid JSON5\n";
+        std::cerr << "Invalid JSON5: " << err << '\n';
     }
 }
 ```

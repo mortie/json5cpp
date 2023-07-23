@@ -4,10 +4,12 @@
 #include <iostream>
 
 int main(int argc, char **argv) {
+	std::string err;
+
 	if (argc <= 1) {
 		Json::Value val;
-		if (!Json5::parse(std::cin, val)) {
-			std::cerr << "Could not parse stdin\n";
+		if (!Json5::parse(std::cin, val, &err)) {
+			std::cerr << "Could not parse stdin: " << err << '\n';
 			return 1;
 		}
 
@@ -23,8 +25,8 @@ int main(int argc, char **argv) {
 			return 1;
 		}
 
-		if (!Json5::parse(is, val)) {
-			std::cerr << "Could not parse " << argv[i] << '\n';
+		if (!Json5::parse(is, val, &err)) {
+			std::cerr << "Could not parse " << argv[i] << ": " << err << '\n';
 			return 1;
 		}
 
