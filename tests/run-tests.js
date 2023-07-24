@@ -86,6 +86,11 @@ function checkJson5(path) {
 	check(path, JSON5, "JSON5");
 }
 
+for (let entry of fs.readdirSync("json5cpp-tests")) {
+	let path = "json5cpp-tests/" + entry;
+	checkJson5(path);
+}
+
 for (let parent of fs.readdirSync("json5-tests")) {
 	let parentPath = "json5-tests/" + parent;
 	if (parent[0] == ".") {

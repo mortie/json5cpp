@@ -92,11 +92,11 @@ private:
 		memmove(buffer_, buffer_ + index_, size_ - index_);
 		size_ -= index_;
 		index_ = 0;
-		size_ += is_.read(buffer_ + size_, sizeof(buffer_) - size_).gcount();
+		size_ += is_.read((char *)buffer_ + size_, sizeof(buffer_) - size_).gcount();
 	}
 
 	std::istream &is_;
-	char buffer_[128];
+	unsigned char buffer_[128];
 	size_t index_ = 0;
 	size_t size_ = 0;
 	Location loc_;
@@ -119,12 +119,44 @@ inline void error(Location loc, std::string *err, const char *what) {
 	*err += what;
 }
 
-// Skip to https://262.ecma-international.org/5.1/A#sec-7.3 LineTerminator
+inline bool isUtf8LineTerminator3B(int a, int b, int c) {
+	// U+2028 Line separator and U+2029 Paragraph separator
+	return a == 0xe2 && b == 0x80 && (c == 0xa8 || c == 0xa9);
+}
+
+inline bool isUtf8Whitespace1B(int ch) {
+	return ch == '\t' || ch == '\n' || ch == '\v' ||
+		ch == '\f' || ch == '\r' || ch == ' ';
+}
+
+inline bool isUtf8Whitespace2B(int a, int b) {
+	return a == 0xc2 && b == 0xa0; // Non-breaking space
+}
+
+inline bool isUtf8Whitespace3B(int a, int b, int c) {
+	if (a < 128) {
+		return false;
+	}
+
+	return isUtf8LineTerminator3B(a, b, c) ||
+		(a == 0xef && b == 0xbb && c == 0xbf) || // BOM
+		(a == 0xe1 && b == 0x9a && c == 0x80) || // Ogham Space Mark
+		(a == 0xe2 && b == 0x80 && (c >= 0x80 && c <= 0x8a)) || // En Quad - Hair Space
+		(a == 0xe2 && b == 0x80 && (c == 0xa8 || c == 0xa9 || c == 0xaf)) || // LS, PS, Narrow NBSP
+		(a == 0xe2 && b == 0x81 && c == 0x9f) || // Medium Mathematical Space (MMSP)
+		(a == 0xe3 && b == 0x80 && c == 0x80); // Ideographic Space
+}
+
+// Skip past https://262.ecma-international.org/5.1/#sec-7.3 LineTerminator
 inline void skipPastLineTerminator(Reader &r) {
-	// I don't really want to parse UTF-8, so let's ignore U+2028 and U+2029
 	while (true) {
 		int ch = r.get();
 		if (ch == EOF || ch == '\n' || ch == '\r') {
+			return;
+		} else if (isUtf8LineTerminator3B(ch, r.peek(0), r.peek(1))) {
+			// U+2028 Line separator and U+2029 Paragraph separator
+			r.get();
+			r.get();
 			return;
 		}
 	}
@@ -133,15 +165,20 @@ inline void skipPastLineTerminator(Reader &r) {
 // Skip https://spec.json5.org/#white-space White Space
 // and https://spec.json5.org/#comments Comments
 inline void skipWhitespace(Reader &r) {
-	// Ignore the non-breaking space and BOM, because, again, no UTF-8 parsing,
-	// and ignore Unicode "space separator" characters
+	// Ignore Unicode Space Separator characters,
+	// Json5Cpp doesn't have a Unicode database
 	while (true) {
 		int ch = r.peek();
 		if (ch == EOF) {
 			return;
-		} else if (
-				ch == '\t' || ch == '\n' || ch == '\v' ||
-				ch == '\f' || ch == '\r' || ch == ' ') {
+		} else if (isUtf8Whitespace1B(ch)) {
+			r.get();
+		} else if (isUtf8Whitespace2B(ch, r.peek(1))) {
+			r.get();
+			r.get();
+		} else if (isUtf8Whitespace3B(ch, r.peek(1), r.peek(2))) {
+			r.get();
+			r.get();
 			r.get();
 		} else if (ch == '/' && r.peek(1) == '/') {
 			r.get();
@@ -163,33 +200,34 @@ inline void skipWhitespace(Reader &r) {
 }
 
 // https://262.ecma-international.org/5.1/#sec-7.6 IdentifierStart
-inline bool isIdentStartChar(int ch) {
-	// I really don't want to depend on a unicode database.
-	// Let's just assume everything >=128 is part of a unicode sequence
-	// which makes a valid unicode letter character.
-	return ch != EOF && (
-		ch >= 128 ||
+inline bool isIdentStartChar1B(int ch) {
+	return
 		(ch >= 'a' && ch <= 'z') ||
 		(ch >= 'A' && ch <= 'Z') ||
-		ch == '$' || ch == '_' || ch == '\\');
+		ch == '$' || ch == '_' || ch == '\\';
 }
 
 // https://262.ecma-international.org/5.1/#sec-7.6 IdentifierPart
-inline bool isIdentPartChar(int ch) {
-	// isIdentStartChar already returns true for any unicode characters,
-	// so we don't have to care about UnicodeDigit and the like
-	return isIdentStartChar(ch) || (ch >= '0' && ch <= '9');
+inline bool isIdentPartChar(int a, int b, int c) {
+	// Json5Cpp doesn't have a Unicode database, so let's just assume non-whitespace
+	// non-ASCII characters are valid identifier characters
+	return isIdentStartChar1B(a) ||
+		(a >= 128 && !isUtf8Whitespace2B(a, b) && !isUtf8Whitespace3B(a, b, c)) ||
+		(a >= '0' && a <= '9');
 }
 
 // https://262.ecma-international.org/5.1/#sec-7.6 IdentifierName
 inline bool readIdentifier(Reader &r, std::string &str, std::string *err) {
-	if (!isIdentStartChar(r.peek())) {
+	// If we're here, we've already skipped whitespace,
+	// so we can assume that characters >=128 are valid identifier characters
+	int ch = r.peek();
+	if (ch < 128 && !isIdentStartChar1B(ch)) {
 		error(r.loc(), err, "Invalid start character in identifier");
 		return false;
 	}
 
 	str += r.get();
-	while (isIdentPartChar(r.peek())) {
+	while (isIdentPartChar(r.peek(0), r.peek(1), r.peek(2))) {
 		str += r.get();
 	}
 
