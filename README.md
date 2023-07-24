@@ -1,7 +1,6 @@
 # Json5Cpp
 
-Json5Cpp is a small, [mostly correct](#json5-incompatibilities)
-header-only library to parse [JSON5](https://json5.org/),
+Json5Cpp is a small header-only library to parse [JSON5](https://json5.org/),
 built on top of [JsonCpp](https://github.com/open-source-parsers/jsoncpp).
 Like JsonCpp, it requires C++11.
 
@@ -64,13 +63,13 @@ No \\n's!",
 Run tests with: `make check`. This depends on git, npm and node.
 
 The test suite consists of the
-[JSON Parsing Test Suite](https://github.com/nst/JSONTestSuite) and the
-[JSON5 test suite](https://github.com/json5/json5-tests).
+[JSON Parsing Test Suite](https://github.com/nst/JSONTestSuite), the
+[JSON5 test suite](https://github.com/json5/json5-tests), and a couple custom tests.
 The test script validates Json5Cpp's output against JavaScript's `JSON.parse`
 for all JSON files in the test set, and against the JSON5 reference implementation
 for all JSON5 files in the set.
 
-There are currently 175 test JSON and JSON5 files.
+There are currently 177 test JSON and JSON5 files.
 All tests pass.
 
 ## Benchmarks
@@ -146,21 +145,21 @@ and no issues have been found.
 
 ## JSON5 Incompatibilities
 
-Json5Cpp isn't 100% compatible with the JSON5 spec, and never will be.
-However, more or less all actual JSON5 documents will work
-(and it passes the JSON5 test suite).
+Json5Cpp should correctly parse all valid JSON5 documents.
+However, it will also accept some documents which the JSON5 spec would consider invalid.
 
-The JSON5 spec treats any character in the Space Separator Unicode category as whitespace.
-That means that correctly parsing a valid JSON5 document requires a Unicode database,
-which Json5Cpp will never include.
-Instead, Json5Cpp treats all the normal ASCII whitespace characters as whitespace.
+* Json5Cpp assumes, but doesn't validate, that the input is UTF-8.
+  If the input isn't valid UTF-8, the parsed JSON tree won't necessarily be valid UTF-8.
+  Use a separate UTF-8 validation library if that's a problem.
+* Identifiers are supposed to only be able to start with non-ASCII characters in the Unicode classes
+  "Uppercase letter", "Lowercase letter", "Titlecase letter", "Modifier letter", "Other letter"
+  or "Letter number". Subsequent letters are constrained to those classes plus a couple more.
+  Json5Cpp doesn't contain a Unicode database, and will accept identifiers which start with
+  or contain all non-whitespace non-ASCII characters.
 
-The JSON5 spec also treats the non-breaking space and the byte-order mark as whitespace,
-which Json5Cpp doesn't at the moment because that would require parsing UTF-8.
-This is something I might fix in the future, since writing a UTF-8 parser
-is way less problematic than adding a dependency on a Unicode database.
-
-There are also some invalid JSON5 documents which Json5Cpp will accept,
-also due to the lack of a Unicode database.
-For example, the JSON5 spec restricts which Unicode character classes which an identifier can
-contain, but Json5Cpp will treat all non-ASCII characters as legal in identifiers.
+If you encounter any valid JSON5 documents which Json5Cpp doesn't correctly parse,
+please do file a bug.
+I've done my best to implement the parser according to the spec,
+and Json5Cpp passes the [json5-test suite](https://github.com/json5/json5-tests)
+(and the [JSONTestSuite](https://github.com/nst/JSONTestSuite)),
+but bugs might of course have sneaked in.
