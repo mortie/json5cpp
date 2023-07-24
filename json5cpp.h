@@ -25,7 +25,6 @@
 #ifndef JSON5CPP_H
 #define JSON5CPP_H
 
-#include "json/writer.h"
 #include <json/json.h>
 #include <istream>
 #include <limits>
@@ -100,7 +99,6 @@ private:
 	size_t index_ = 0;
 	size_t size_ = 0;
 	Location loc_;
-	std::string *err_;
 
 	std::unique_ptr<Json::CharReader> jsonCharReader_;
 };
@@ -566,7 +564,7 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDept
 		}
 
 		std::string key;
-		if (ch == '"' | ch == '\'') {
+		if (ch == '"' || ch == '\'') {
 			if (!readStringLiteral(r, key, err)) {
 				return false;
 			}
