@@ -82,6 +82,10 @@ The benchmarking suite compares Json5Cpp against
 In my testing, Json5Cpp turns out a bit faster than JsonCpp across the board,
 and trades blows with nlohmann/json.
 
+These benchmarks aren't very robust, don't take them as a reliable statement about the
+absolute performance of the different JSON parsers.
+However, they serve as a sanity check to make sure Json5Cpp isn't doing something stupid.
+
 Here's a typical run on my AMD R9 5950X:
 
 ```
