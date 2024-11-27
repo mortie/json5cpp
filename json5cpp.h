@@ -61,12 +61,12 @@ public:
 	int get() {
 		int ch = peek();
 		index_ += 1;
-		return ch;
 		loc_.ch += 1;
 		if (ch == '\n') {
 			loc_.ch = 1;
 			loc_.line += 1;
 		}
+		return ch;
 	}
 
 	Location loc() {
