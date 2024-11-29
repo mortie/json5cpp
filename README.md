@@ -1,10 +1,13 @@
 # Json5Cpp
 
-Json5Cpp is a small header-only library to parse [JSON5](https://json5.org/),
+Json5Cpp is a small header-only library to parse and serialize
+[JSON5](https://json5.org/),
 built on top of [JsonCpp](https://github.com/open-source-parsers/jsoncpp).
 Like JsonCpp, it requires C++11.
 
-The API is simple, just one function with this signature:
+The API is simple, just one function to parse and one function to serialize.
+
+## Parsing
 
 ```c++
 bool Json5::parse(
@@ -16,6 +19,27 @@ It returns `true` on success, `false` on error.
 If an error occurs, the string pointed to by `err` will be filled with an error message,
 if it's not null.
 The `maxDepth` argument sets the recursion limit.
+
+## Serializing
+
+```c++
+struct Json5::SerializationConfig {
+    // Whether or not to add a trailing ',' after the last element
+    // of an object/array.
+    bool trailingCommas = true;
+
+    // Whether or not to omit quotes in keys when possible.
+    bool bareKeys = true;
+
+    // The string used for each level of nesting.
+    // Set to 'nullptr' to avoid whitespace completely.
+    const char *indent = "\t";
+};
+
+void Json5::serialize(
+        std::ostream &, const Json::Value &,
+        const Json5::SerializationConfig &conf = {}, int depth = 0);
+```
 
 ## Examples
 
@@ -36,9 +60,27 @@ int main() {
 }
 ```
 
+And here's the opposite,
+a program which reads JSON from stdin and writes JSON5 to stdout:
+
+```c++
+#include <json5cpp/json5cpp.h>
+#include <iostream>
+
+int main() {
+    Json::Value value;
+    std::string err;
+    std::cin >> value;
+    Json5::serialize(std::cout, value);
+}
+```
+
 For a slightly bigger example, this repo contains a `json5-to-json` example program
 which reads JOSN5 files and outputs JSON:
 [examples/json5-to-json.cc](./examples/json5-to-json.cc).
+There's also a `json-to-json5` example program which reads JSON files
+and outputs JSON5:
+[examples/json-to-json5.cc](./examples/json-to-json5.cc).
 
 Here's an example JSON5 document which showcases some of its features
 (stolen from [json5.org](https://json5.org/)):

@@ -33,6 +33,19 @@
 
 namespace Json5 {
 
+struct SerializationConfig {
+    // Whether or not to add a trailing ',' after the last element
+    // of an object/array.
+    bool trailingCommas = true;
+
+    // Whether or not to omit quotes in keys when possible.
+    bool bareKeys = true;
+
+    // The string used for each level of nesting.
+    // Set to 'nullptr' to avoid whitespace completely.
+    const char *indent = "\t";
+};
+
 namespace detail {
 
 struct Location {
@@ -104,6 +117,11 @@ private:
 };
 
 bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth);
+
+void serializeValue(
+		std::ostream &os, const Json::Value &v,
+		const SerializationConfig &conf, int depth);
+void serializeStringLiteral(std::ostream &os, const char *ident);
 
 inline void error(Location loc, std::string *err, const char *what) {
 	if (!err) {
@@ -230,6 +248,38 @@ inline bool readIdentifier(Reader &r, std::string &str, std::string *err) {
 	}
 
 	return true;
+}
+
+inline void serializeIdentifier(
+		std::ostream &os, const char *ident,
+		const SerializationConfig &conf) {
+	if (!conf.bareKeys || *ident == '\0') {
+		return serializeStringLiteral(os, ident);
+	}
+
+	// Json5Cpp doesn't have a unicode database,
+	// so let's conservatively only emit bare identifiers if
+	// all the characters are alphanumeric ASCII
+	const char *it = ident;
+	for (char ch; (ch = *it); ++it) {
+		// Legal characters anywhere in the identifier
+		if (
+				(ch >= 'a' && ch <= 'z') ||
+				(ch >= 'A' && ch <= 'Z') ||
+				ch == '$' || ch == '_') {
+			continue;
+		}
+
+		// Legal characters after the first character
+		if (it != ident && ch >= '0' && ch <= '9') {
+			continue;
+		}
+
+		return serializeStringLiteral(os, ident);
+	}
+
+	// All good, we can just emit the string directly
+	os << ident;
 }
 
 inline int hexChar(int ch) {
@@ -405,6 +455,24 @@ inline bool readStringLiteral(Reader &r, std::string &str, std::string *err) {
 	}
 }
 
+inline void serializeStringLiteral(std::ostream &os, const char *ident) {
+	os << '"';
+	for (char ch; (ch = *ident); ++ident) {
+		if (ch == '"') {
+			os << "\\\"";
+		} else if (ch == '\t') {
+			os << "\\t";
+		} else if (ch == '\r') {
+			os << "\\r";
+		} else if (ch == '\n') {
+			os << "\\n";
+		} else {
+			os << ch;
+		}
+	}
+	os << '"';
+}
+
 // https://spec.json5.org/#numbers JSON5Number
 inline bool parseNumber(Reader &r, Json::Value &v, std::string *err) {
 	// Parsing floats accurately is hard.
@@ -536,6 +604,19 @@ inline bool parseNumber(Reader &r, Json::Value &v, std::string *err) {
 	return true;
 }
 
+inline void serializeNewLine(
+		std::ostream &os, const SerializationConfig &conf, int depth) {
+	if (conf.indent == nullptr) {
+		return;
+	}
+
+	os << '\n';
+
+	while (depth--) {
+		os << conf.indent;
+	}
+}
+
 // https://spec.json5.org/#prod-JSON5Object JSON5Object
 inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
 	r.get(); // '{'
@@ -589,6 +670,40 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDept
 	}
 }
 
+inline void serializeObject(
+		std::ostream &os, const Json::Value &v,
+		const SerializationConfig &conf, int depth) {
+	os << '{';
+	bool first = true;
+	for (auto it = v.begin(); it != v.end(); ++it) {
+		if (!first) {
+			os << ',';
+		}
+		first = false;
+
+		serializeNewLine(os, conf, depth + 1);
+
+		serializeIdentifier(os, it.key().asCString(), conf);
+		if (conf.indent == nullptr) {
+			os << ":";
+		} else {
+			os << ": ";
+		}
+
+		serializeValue(os, *it, conf, depth + 1);
+	}
+
+	if (!first) {
+		if (conf.trailingCommas) {
+			os << ',';
+		}
+
+		serializeNewLine(os, conf, depth);
+	}
+
+	os << '}';
+}
+
 // https://spec.json5.org/#prod-JSON5Array JSON5Array
 inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
 	r.get(); // '['
@@ -620,6 +735,32 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int maxDepth
 			return false;
 		}
 	}
+}
+
+inline void serializeArray(
+		std::ostream &os, const Json::Value &v,
+		const SerializationConfig &conf, int depth) {
+	os << '[';
+	bool first = true;
+	for (auto it = v.begin(); it != v.end(); ++it) {
+		if (!first) {
+			os << ',';
+		}
+		first = false;
+
+		serializeNewLine(os, conf, depth + 1);
+		serializeValue(os, *it, conf, depth + 1);
+	}
+
+	if (!first) {
+		if (conf.trailingCommas) {
+			os << ',';
+		}
+
+		serializeNewLine(os, conf, depth);
+	}
+
+	os << ']';
 }
 
 // https://spec.json5.org/#values JSON5Value
@@ -673,6 +814,20 @@ inline bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth
 	return true;
 }
 
+inline void serializeValue(
+		std::ostream &os, const Json::Value &v,
+		const SerializationConfig &conf, int depth) {
+	if (v.isObject()) {
+		serializeObject(os, v, conf, depth);
+	} else if (v.isArray()) {
+		serializeArray(os, v, conf, depth);
+	} else if (v.isString()) {
+		serializeStringLiteral(os, v.asCString());
+	} else {
+		os << v;
+	}
+}
+
 }
 
 inline bool parse(
@@ -691,6 +846,13 @@ inline bool parse(
 	}
 
 	return true;
+}
+
+inline void serialize(
+		std::ostream &os, const Json::Value &v,
+		const SerializationConfig &conf = {}, int depth = 0) {
+	detail::serializeValue(os, v, conf, depth);
+	os << '\n';
 }
 
 }
