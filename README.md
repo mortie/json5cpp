@@ -10,20 +10,28 @@ The API is simple, just one function to parse and one function to serialize.
 ## Parsing
 
 ```c++
+struct Json5::ParseConfig {
+    // Whether or not to enforce a ',' between object/array elements.
+    // Note: Setting this to 'false' enables invalid JSON5.
+    bool mandatoryCommas = true;
+
+    // The maximum parse depth, to avoid unbounded recursion.
+    int maxDepth = 100;
+};
+
 bool Json5::parse(
-        std::istream &, Json::Value &,
-        std::string *err = nullptr, int maxDepth = 100);
+    std::istream &, Json::Value &,
+    std::string *err = nullptr, Json5::ParseConfig conf = {});
 ```
 
 It returns `true` on success, `false` on error.
 If an error occurs, the string pointed to by `err` will be filled with an error message,
 if it's not null.
-The `maxDepth` argument sets the recursion limit.
 
 ## Serializing
 
 ```c++
-struct Json5::SerializationConfig {
+struct Json5::SerializeConfig {
     // Whether or not to add a trailing ',' after the last element
     // of an object/array.
     bool trailingCommas = true;
@@ -37,9 +45,12 @@ struct Json5::SerializationConfig {
 };
 
 void Json5::serialize(
-        std::ostream &, const Json::Value &,
-        const Json5::SerializationConfig &conf = {}, int depth = 0);
+    std::ostream &, const Json::Value &,
+    Json5::SerializeConfig conf = {}, int depth = 0);
 ```
+
+Since it doesn't return a status, it's up to the calling code
+to check whether the `bad` bit is set on the output stream.
 
 ## Examples
 

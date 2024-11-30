@@ -5,7 +5,7 @@
 #include <fstream>
 
 int main(int argc, char **argv) {
-	Json5::SerializationConfig conf;
+	Json5::SerializeConfig conf;
 
 	std::unique_ptr<std::ifstream> file;
 	std::istream *input = &std::cin;
