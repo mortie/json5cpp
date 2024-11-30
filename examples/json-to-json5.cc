@@ -49,4 +49,5 @@ int main(int argc, char **argv) {
 	*input >> val;
 
 	Json5::serialize(std::cout, val, conf);
+	std::cout << '\n';
 }

@@ -883,7 +883,6 @@ inline void serialize(
 		std::ostream &os, const Json::Value &v,
 		SerializeConfig conf = {}, int depth = 0) {
 	detail::serializeValue(os, v, conf, depth);
-	os << '\n';
 }
 
 }

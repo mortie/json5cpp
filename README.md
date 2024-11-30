@@ -83,6 +83,7 @@ int main() {
     std::string err;
     std::cin >> value;
     Json5::serialize(std::cout, value);
+    std::cout << '\n';
 }
 ```
 
