@@ -26,14 +26,10 @@
 #define JSON5CPP_H
 
 #include <json/json.h>
-#include <string>
-
-#ifndef JSON5CPP_FWD_ONLY
 #include <istream>
 #include <limits>
 #include <memory>
 #include <string.h>
-#endif
 
 namespace Json5 {
 
@@ -58,16 +54,6 @@ struct SerializeConfig {
 	// Set to 'nullptr' to avoid whitespace completely.
 	const char *indent = "\t";
 };
-
-bool parse(
-		std::istream &is, Json::Value &v,
-		std::string *err = nullptr, ParseConfig conf = {});
-
-void serialize(
-		std::ostream &os, const Json::Value &v,
-		SerializeConfig conf = {}, int depth = 0);
-
-#ifndef JSON5CPP_FWD_ONLY
 
 namespace detail {
 
@@ -875,12 +861,9 @@ inline void serializeValue(
 
 }
 
-#ifndef JSON5CPP_IMPL
-inline
-#endif
-bool parse(
+inline bool parse(
 		std::istream &is, Json::Value &v,
-		std::string *err, ParseConfig conf) {
+		std::string *err = nullptr, ParseConfig conf = {}) {
 	detail::Reader r(is, conf);
 
 	if (!detail::parseValue(r, v, err, 0)) {
@@ -896,17 +879,12 @@ bool parse(
 	return true;
 }
 
-#ifndef JSON5CPP_IMPL
-inline
-#endif
-void serialize(
+inline void serialize(
 		std::ostream &os, const Json::Value &v,
-		SerializeConfig conf, int depth) {
+		SerializeConfig conf = {}, int depth = 0) {
 	detail::serializeValue(os, v, conf, depth);
 }
 
-#endif // JSON5CPP_FWD_ONLY
-
 }
 
-#endif // JSON5CPP_H
+#endif
