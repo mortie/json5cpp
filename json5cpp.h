@@ -33,6 +33,28 @@
 
 namespace Json5 {
 
+struct ParseConfig {
+	// Whether or not to enforce a ',' between object/array elements.
+	// Note: Setting this to 'false' enables invalid JSON5.
+	bool mandatoryCommas = true;
+
+	// The maximum parse depth, to avoid unbounded recursion.
+	int maxDepth = 100;
+};
+
+struct SerializeConfig {
+	// Whether or not to add a trailing ',' after the last element
+	// of an object/array.
+	bool trailingCommas = true;
+
+	// Whether or not to omit quotes in keys when possible.
+	bool bareKeys = true;
+
+	// The string used for each level of nesting.
+	// Set to 'nullptr' to avoid whitespace completely.
+	const char *indent = "\t";
+};
+
 namespace detail {
 
 struct Location {
@@ -42,7 +64,7 @@ struct Location {
 
 class Reader {
 public:
-	Reader(std::istream &is): is_(is) {
+	Reader(std::istream &is, ParseConfig conf = {}): is_(is), conf_(conf) {
 		fill();
 	}
 
@@ -73,6 +95,10 @@ public:
 		return loc_;
 	}
 
+	const ParseConfig &conf() {
+		return conf_;
+	}
+
 	Json::CharReader &jsonCharReader() {
 		if (!jsonCharReader_) {
 			Json::CharReaderBuilder b;
@@ -99,11 +125,17 @@ private:
 	size_t index_ = 0;
 	size_t size_ = 0;
 	Location loc_;
+	ParseConfig conf_;
 
 	std::unique_ptr<Json::CharReader> jsonCharReader_;
 };
 
-bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth);
+bool parseValue(Reader &r, Json::Value &v, std::string *err, int depth);
+
+void serializeValue(
+		std::ostream &os, const Json::Value &v,
+		const SerializeConfig &conf, int depth);
+void serializeStringLiteral(std::ostream &os, const char *ident);
 
 inline void error(Location loc, std::string *err, const char *what) {
 	if (!err) {
@@ -230,6 +262,38 @@ inline bool readIdentifier(Reader &r, std::string &str, std::string *err) {
 	}
 
 	return true;
+}
+
+inline void serializeIdentifier(
+		std::ostream &os, const char *ident,
+		const SerializeConfig &conf) {
+	if (!conf.bareKeys || *ident == '\0') {
+		return serializeStringLiteral(os, ident);
+	}
+
+	// Json5Cpp doesn't have a unicode database,
+	// so let's conservatively only emit bare identifiers if
+	// all the characters are alphanumeric ASCII
+	const char *it = ident;
+	for (char ch; (ch = *it); ++it) {
+		// Legal characters anywhere in the identifier
+		if (
+				(ch >= 'a' && ch <= 'z') ||
+				(ch >= 'A' && ch <= 'Z') ||
+				ch == '$' || ch == '_') {
+			continue;
+		}
+
+		// Legal characters after the first character
+		if (it != ident && ch >= '0' && ch <= '9') {
+			continue;
+		}
+
+		return serializeStringLiteral(os, ident);
+	}
+
+	// All good, we can just emit the string directly
+	os << ident;
 }
 
 inline int hexChar(int ch) {
@@ -405,6 +469,24 @@ inline bool readStringLiteral(Reader &r, std::string &str, std::string *err) {
 	}
 }
 
+inline void serializeStringLiteral(std::ostream &os, const char *ident) {
+	os << '"';
+	for (char ch; (ch = *ident); ++ident) {
+		if (ch == '"') {
+			os << "\\\"";
+		} else if (ch == '\t') {
+			os << "\\t";
+		} else if (ch == '\r') {
+			os << "\\r";
+		} else if (ch == '\n') {
+			os << "\\n";
+		} else {
+			os << ch;
+		}
+	}
+	os << '"';
+}
+
 // https://spec.json5.org/#numbers JSON5Number
 inline bool parseNumber(Reader &r, Json::Value &v, std::string *err) {
 	// Parsing floats accurately is hard.
@@ -536,13 +618,27 @@ inline bool parseNumber(Reader &r, Json::Value &v, std::string *err) {
 	return true;
 }
 
+inline void serializeNewLine(
+		std::ostream &os, const SerializeConfig &conf, int depth) {
+	if (conf.indent == nullptr) {
+		return;
+	}
+
+	os << '\n';
+
+	while (depth--) {
+		os << conf.indent;
+	}
+}
+
 // https://spec.json5.org/#prod-JSON5Object JSON5Object
-inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
+inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int depth) {
 	r.get(); // '{'
 
 	v = Json::objectValue;
 	while (true) {
 		skipWhitespace(r);
+		bool comma = false;
 
 		int ch = r.peek();
 		if (ch == EOF) {
@@ -556,11 +652,18 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDept
 				error(r.loc(), err, "Unexpected EOF");
 				return false;
 			}
+
+			comma = true;
 		}
 
 		if (ch == '}') {
 			r.get();
 			return true;
+		}
+
+		if (!comma && r.conf().mandatoryCommas) {
+			error(r.loc(), err, "Expected ',' or ']'");
+			return false;
 		}
 
 		std::string key;
@@ -583,20 +686,56 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int maxDept
 		}
 		r.get();
 
-		if (!parseValue(r, v[key], err, maxDepth)) {
+		if (!parseValue(r, v[key], err, depth)) {
 			return false;
 		}
 	}
 }
 
+inline void serializeObject(
+		std::ostream &os, const Json::Value &v,
+		const SerializeConfig &conf, int depth) {
+	os << '{';
+	bool first = true;
+	for (auto it = v.begin(); it != v.end(); ++it) {
+		if (!first) {
+			os << ',';
+		}
+		first = false;
+
+		serializeNewLine(os, conf, depth + 1);
+
+		serializeIdentifier(os, it.key().asCString(), conf);
+		if (conf.indent == nullptr) {
+			os << ":";
+		} else {
+			os << ": ";
+		}
+
+		serializeValue(os, *it, conf, depth + 1);
+	}
+
+	if (!first) {
+		if (conf.trailingCommas) {
+			os << ',';
+		}
+
+		serializeNewLine(os, conf, depth);
+	}
+
+	os << '}';
+}
+
 // https://spec.json5.org/#prod-JSON5Array JSON5Array
-inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
+inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int depth) {
 	r.get(); // '['
 
 	v = Json::arrayValue;
 	Json::ArrayIndex index = 0;
 	while (true) {
 		skipWhitespace(r);
+		bool comma = false;
+
 		int ch = r.peek();
 		if (ch == EOF) {
 			error(r.loc(), err, "Unexpected EOF");
@@ -609,6 +748,8 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int maxDepth
 				error(r.loc(), err, "Unexpected EOF");
 				return false;
 			}
+
+			comma = true;
 		}
 
 		if (ch == ']') {
@@ -616,15 +757,46 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int maxDepth
 			return true;
 		}
 
-		if (!parseValue(r, v[index++], err, maxDepth)) {
+		if (!comma && r.conf().mandatoryCommas) {
+			error(r.loc(), err, "Expected ',' or ']'");
+			return false;
+		}
+
+		if (!parseValue(r, v[index++], err, depth)) {
 			return false;
 		}
 	}
 }
 
+inline void serializeArray(
+		std::ostream &os, const Json::Value &v,
+		const SerializeConfig &conf, int depth) {
+	os << '[';
+	bool first = true;
+	for (auto it = v.begin(); it != v.end(); ++it) {
+		if (!first) {
+			os << ',';
+		}
+		first = false;
+
+		serializeNewLine(os, conf, depth + 1);
+		serializeValue(os, *it, conf, depth + 1);
+	}
+
+	if (!first) {
+		if (conf.trailingCommas) {
+			os << ',';
+		}
+
+		serializeNewLine(os, conf, depth);
+	}
+
+	os << ']';
+}
+
 // https://spec.json5.org/#values JSON5Value
-inline bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth) {
-	if (maxDepth < 0) {
+inline bool parseValue(Reader &r, Json::Value &v, std::string *err, int depth) {
+	if (depth >= r.conf().maxDepth) {
 		error(r.loc(), err, "Depth limit reached");
 		return false;
 	}
@@ -636,9 +808,9 @@ inline bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth
 		error(loc, err, "Unexpected EOF");
 		return false;
 	} else if (ch == '{') {
-		return detail::parseObject(r, v, err, maxDepth - 1);
+		return detail::parseObject(r, v, err, depth + 1);
 	} else if (ch == '[') {
-		return detail::parseArray(r, v, err, maxDepth - 1);
+		return detail::parseArray(r, v, err, depth + 1);
 	} else if (ch == '"' || ch == '\'') {
 		std::string s;
 		if (!detail::readStringLiteral(r, s, err)) {
@@ -673,14 +845,28 @@ inline bool parseValue(Reader &r, Json::Value &v, std::string *err, int maxDepth
 	return true;
 }
 
+inline void serializeValue(
+		std::ostream &os, const Json::Value &v,
+		const SerializeConfig &conf, int depth) {
+	if (v.isObject()) {
+		serializeObject(os, v, conf, depth);
+	} else if (v.isArray()) {
+		serializeArray(os, v, conf, depth);
+	} else if (v.isString()) {
+		serializeStringLiteral(os, v.asCString());
+	} else {
+		os << v;
+	}
+}
+
 }
 
 inline bool parse(
 		std::istream &is, Json::Value &v,
-		std::string *err = nullptr, int maxDepth = 100) {
-	detail::Reader r(is);
+		std::string *err = nullptr, ParseConfig conf = {}) {
+	detail::Reader r(is, conf);
 
-	if (!detail::parseValue(r, v, err, maxDepth)) {
+	if (!detail::parseValue(r, v, err, 0)) {
 		return false;
 	}
 
@@ -691,6 +877,12 @@ inline bool parse(
 	}
 
 	return true;
+}
+
+inline void serialize(
+		std::ostream &os, const Json::Value &v,
+		SerializeConfig conf = {}, int depth = 0) {
+	detail::serializeValue(os, v, conf, depth);
 }
 
 }
