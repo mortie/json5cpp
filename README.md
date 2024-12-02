@@ -112,6 +112,32 @@ No \\n's!",
 }
 ```
 
+## Separate compilation
+
+Json5Cpp is primarily a header-only library.
+However, if you want to use it a separately-compiled library,
+you can use the `JSON5CPP_FWD_ONLY` and `JSON5CPP_IMPL` macros:
+
+* Rename this repo's `json5cpp.h` file to `json5cpp_impl.h`
+* Make a `json5cpp.cc` source file which will contain all the implementations:
+
+```c++
+#define JSON5CPP_IMPL
+#include "json5cpp_impl.h"
+```
+
+This file should be compiled into a .o file by your build system
+like any other C++ source file.
+
+* Make a `json5cpp.h` file which defines `JSON5CPP_FWD_ONLY`:
+
+```c++
+#define JSON5CPP_FWD_ONLY
+#include "json5cpp_impl.h"
+```
+
+This will be the file you `#include` in your other source files.
+
 ## Tests
 
 Run tests with: `make check`. This depends on git, npm and node.

@@ -1,5 +1,4 @@
-/json5-to-json
-/json-to-json5
+/build
 /fuzz-data
 *.dSYM
 .cache
