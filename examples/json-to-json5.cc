@@ -7,7 +7,7 @@
 int main(int argc, char **argv) {
 	Json5::SerializeConfig conf;
 
-	std::unique_ptr<std::ifstream> file;
+	std::unique_ptr<std::ifstream> ifile;
 	std::istream *input = &std::cin;
 
 	for (int i = 1; i < argc; ++i) {
@@ -32,16 +32,16 @@ int main(int argc, char **argv) {
 		} else if (opt[0] == '-') {
 			std::cerr << "Unknown option: '" << opt << "'\n";
 			return 1;
-		} else if (file) {
+		} else if (ifile) {
 			std::cerr << "Too many file arguments\n";
 			return 1;
 		} else {
-			file.reset(new std::ifstream(opt));
-			if (file->bad()) {
+			ifile.reset(new std::ifstream(opt));
+			if (ifile->bad()) {
 				std::cerr << "Couldn't open " << opt << '\n';
 				return 1;
 			}
-			input = file.get();
+			input = ifile.get();
 		}
 	}
 

@@ -4,34 +4,37 @@
 #include <iostream>
 
 int main(int argc, char **argv) {
-	std::string err;
+	Json5::ParseConfig conf;
 
-	if (argc <= 1) {
-		Json::Value val;
-		if (!Json5::parse(std::cin, val, &err)) {
-			std::cerr << "Could not parse stdin: " << err << '\n';
-			return 1;
-		}
-
-		std::cout << val << '\n';
-		return 0;
-	}
+	std::unique_ptr<std::ifstream> ifile;
+	std::istream *input = &std::cin;
 
 	for (int i = 1; i < argc; ++i) {
-		Json::Value val;
-		std::ifstream is{argv[i]};
-		if (!is) {
-			std::cerr << "Could not open " << argv[i] << '\n';
+		char *opt = argv[i];
+		if (strcmp(opt, "--newlines-as-commas") == 0) {
+			conf.newlinesAsCommas = true;
+		} else if (opt[0] == '-') {
+			std::cerr << "Unknown option: '" << opt << "'\n";
 			return 1;
-		}
-
-		if (!Json5::parse(is, val, &err)) {
-			std::cerr << "Could not parse " << argv[i] << ": " << err << '\n';
+		} else if (ifile) {
+			std::cerr << "Too many file arguments\n";
 			return 1;
+		} else {
+			ifile.reset(new std::ifstream(opt));
+			if (ifile->bad()) {
+				std::cerr << "Couldn't open " << opt << '\n';
+				return 1;
+			}
+			input = ifile.get();
 		}
-
-		std::cout << val << '\n';
 	}
 
-	return 0;
+	Json::Value val;
+	std::string err;
+	if (!Json5::parse(*input, val, &err, conf)) {
+		std::cerr << "Could not parse stdin: " << err << '\n';
+		return 1;
+	}
+
+	std::cout << val << '\n';
 }

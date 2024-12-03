@@ -38,9 +38,10 @@
 namespace Json5 {
 
 struct ParseConfig {
-	// Whether or not to enforce a ',' between object/array elements.
-	// Note: Setting this to 'false' enables invalid JSON5.
-	bool mandatoryCommas = true;
+	// Whether or not to accept newlines instead of commas
+	// between object/array elements.
+	// Note: Setting this to 'true' enables invalid JSON5.
+	bool newlinesAsCommas = false;
 
 	// The maximum parse depth, to avoid unbounded recursion.
 	int maxDepth = 100;
@@ -208,13 +209,18 @@ inline void skipPastLineTerminator(Reader &r) {
 
 // Skip https://spec.json5.org/#white-space White Space
 // and https://spec.json5.org/#comments Comments
-inline void skipWhitespace(Reader &r) {
+// Returns true if a newline was skipped.
+inline bool skipWhitespace(Reader &r) {
+	bool newline = false;
 	// Ignore Unicode Space Separator characters,
 	// Json5Cpp doesn't have a Unicode database
 	while (true) {
 		int ch = r.peek();
 		if (ch == EOF) {
-			return;
+			return newline;
+		} else if (ch == '\n') {
+			newline = true;
+			r.get();
 		} else if (isUtf8Whitespace1B(ch)) {
 			r.get();
 		} else if (isUtf8Whitespace2B(ch, r.peek(1))) {
@@ -238,7 +244,7 @@ inline void skipWhitespace(Reader &r) {
 				ch = r.get();
 			}
 		} else {
-			return;
+			return newline;
 		}
 	}
 }
@@ -651,7 +657,7 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int depth) 
 
 	v = Json::objectValue;
 	while (true) {
-		skipWhitespace(r);
+		bool newline = skipWhitespace(r);
 		bool comma = false;
 
 		int ch = r.peek();
@@ -675,8 +681,13 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int depth) 
 			return true;
 		}
 
-		if (!comma && r.conf().mandatoryCommas) {
-			error(r.loc(), err, "Expected ',' or ']'");
+		if (r.conf().newlinesAsCommas) {
+			if (!comma && !newline) {
+				error(r.loc(), err, "Expected ',', newline or '}'");
+				return false;
+			}
+		} else if (!comma) {
+			error(r.loc(), err, "Expected ',' or '}'");
 			return false;
 		}
 
@@ -747,7 +758,7 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int depth) {
 	v = Json::arrayValue;
 	Json::ArrayIndex index = 0;
 	while (true) {
-		skipWhitespace(r);
+		bool newline = skipWhitespace(r);
 		bool comma = false;
 
 		int ch = r.peek();
@@ -771,7 +782,12 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int depth) {
 			return true;
 		}
 
-		if (!comma && r.conf().mandatoryCommas) {
+		if (r.conf().newlinesAsCommas) {
+			if (!comma && !newline) {
+				error(r.loc(), err, "Expected ',', newline or ']'");
+				return false;
+			}
+		} else if (!comma) {
 			error(r.loc(), err, "Expected ',' or ']'");
 			return false;
 		}
