@@ -656,42 +656,16 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int depth) 
 	r.get(); // '{'
 
 	v = Json::objectValue;
+
+	skipWhitespace(r);
+	if (r.peek() == '}') {
+		r.get();
+		return true;
+	}
+
 	while (true) {
-		bool newline = skipWhitespace(r);
-		bool comma = false;
-
-		int ch = r.peek();
-		if (ch == EOF) {
-			error(r.loc(), err, "Unexpected EOF");
-			return false;
-		} else if (ch == ',') {
-			r.get();
-			skipWhitespace(r);
-			ch = r.peek();
-			if (ch == EOF) {
-				error(r.loc(), err, "Unexpected EOF");
-				return false;
-			}
-
-			comma = true;
-		}
-
-		if (ch == '}') {
-			r.get();
-			return true;
-		}
-
-		if (r.conf().newlinesAsCommas) {
-			if (!comma && !newline) {
-				error(r.loc(), err, "Expected ',', newline or '}'");
-				return false;
-			}
-		} else if (!comma) {
-			error(r.loc(), err, "Expected ',' or '}'");
-			return false;
-		}
-
 		std::string key;
+		int ch = r.peek();
 		if (ch == '"' || ch == '\'') {
 			if (!readStringLiteral(r, key, err)) {
 				return false;
@@ -703,7 +677,6 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int depth) 
 		}
 
 		skipWhitespace(r);
-
 		ch = r.peek();
 		if (ch != ':') {
 			error(r.loc(), err, "Expected colon ':'");
@@ -712,6 +685,34 @@ inline bool parseObject(Reader &r, Json::Value &v, std::string *err, int depth) 
 		r.get();
 
 		if (!parseValue(r, v[key], err, depth)) {
+			return false;
+		}
+
+		bool newline = skipWhitespace(r);
+		bool comma = false;
+
+		ch = r.peek();
+		if (ch == ',') {
+			comma = true;
+			r.get();
+			skipWhitespace(r);
+			ch = r.peek();
+		}
+
+		if (ch == EOF) {
+			error(r.loc(), err, "Unexpected EOF");
+		} else if (ch == '}') {
+			r.get();
+			return true;
+		}
+
+		if (r.conf().newlinesAsCommas) {
+			if (!comma && !newline) {
+				error(r.loc(), err, "Expected ',', newline or '}'");
+				return false;
+			}
+		} else if (!comma) {
+			error(r.loc(), err, "Expected ',' or '}'");
 			return false;
 		}
 	}
@@ -756,28 +757,33 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int depth) {
 	r.get(); // '['
 
 	v = Json::arrayValue;
+
+	skipWhitespace(r);
+	if (r.peek() == ']') {
+		r.get();
+		return true;
+	}
+
 	Json::ArrayIndex index = 0;
 	while (true) {
+		if (!parseValue(r, v[index++], err, depth)) {
+			return false;
+		}
+
 		bool newline = skipWhitespace(r);
-		bool comma = false;
 
 		int ch = r.peek();
-		if (ch == EOF) {
-			error(r.loc(), err, "Unexpected EOF");
-			return false;
-		} else if (ch == ',') {
+		bool comma = false;
+		if (ch == ',') {
+			comma = true;
 			r.get();
 			skipWhitespace(r);
 			ch = r.peek();
-			if (ch == EOF) {
-				error(r.loc(), err, "Unexpected EOF");
-				return false;
-			}
-
-			comma = true;
 		}
 
-		if (ch == ']') {
+		if (ch == EOF) {
+			error(r.loc(), err, "Unexpectef EOF");
+		} else if (ch == ']') {
 			r.get();
 			return true;
 		}
@@ -789,10 +795,6 @@ inline bool parseArray(Reader &r, Json::Value &v, std::string *err, int depth) {
 			}
 		} else if (!comma) {
 			error(r.loc(), err, "Expected ',' or ']'");
-			return false;
-		}
-
-		if (!parseValue(r, v[index++], err, depth)) {
 			return false;
 		}
 	}
